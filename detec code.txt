@@ -1,0 +1,62 @@
+import torch
+import cv2
+import numpy as np
+import serial
+import time
+
+# Initialize serial communication
+ser = serial.Serial('COM3', 9600, timeout=1)  # Adjust 'COM3' to your Arduino's COM port
+
+def send_data(data):
+    ser.write((data + '\n').encode())
+
+car_list = ['car', 'truck', 'bus']
+
+# Load the YOLOv5 model
+model = torch.hub.load('ultralytics/yolov5', 'yolov5s')  # or yolov5m, yolov5l, yolov5x, etc.
+
+# Initialize video capture
+cap = cv2.VideoCapture(0)
+
+prevDet = ""
+car_detected_time = 0
+door_open_duration = 10  # seconds
+
+while cap.isOpened():
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    results = model(frame)
+    rendered_img = np.squeeze(results.render())
+    cv2.imshow('YOLO', rendered_img)
+
+    iscar = 0
+
+    if results.pred[0].size(0) > 0:
+        for detection in results.pred[0]:
+            class_name = model.names[int(detection[5])]
+            if (class_name in car_list) and detection[4] > 0.50:  # Check if the object is a car with confidence > 50%
+                iscar = 1
+                break
+
+    current_time = time.time()
+    
+    if iscar == 1 and prevDet != "car":
+        print("Car detected! Opening garage door...")
+        send_data('a')
+        car_detected_time = current_time
+        prevDet = "car"
+    elif iscar == 0 and prevDet == "car" and current_time - car_detected_time > door_open_duration:
+        print("No car detected. Closing garage door...")
+        send_data('b')
+        prevDet = ""
+
+    if cv2.waitKey(10) & 0xFF == ord('q'):
+        break
+
+cap.release()
+cv2.destroyAllWindows()
+
+# Close the serial connection
+ser.close()

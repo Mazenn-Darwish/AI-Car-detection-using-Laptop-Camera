@@ -1,0 +1,359 @@
+#include <GL/glut.h>
+#include <cmath>
+#include <string>
+#include <sstream>
+#include <iostream>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
+
+// Game states
+enum GameState {
+    MENU,
+    GAME,
+    GAME_OVER
+};
+
+GameState currentGameState = MENU;
+
+float posX = 0.0;
+float posY = -0.5;
+float velocityY = 0.0;
+bool isJumping = false;
+const float gravity = 0.006;
+const float jumpStrength = 0.1;
+int seconds = 0;
+int score = 0;
+bool isGameOver = false;
+
+const float groundLevel = -0.5;
+
+struct Obstacle {
+    float x, y, width, height;
+    bool passed;
+};
+
+std::vector<Obstacle> obstacles;
+float obstacleSpeed = 0.02f;
+int obstacleSpawnTime = 100;
+int frameCounter = 0;
+
+void drawCharacter() {
+    if (isGameOver) return;
+
+    float size = 0.5; // Scale factor for the character size
+    float elevation = 0.06; // Elevation factor to lift the character higher
+
+    // Helmet
+    glBegin(GL_POLYGON);
+    glColor3f(1.0, 1.0, 1.0); // White
+    glVertex2f(posX - 0.06 * size, posY + 0.35 * size + elevation);
+    glVertex2f(posX + 0.06 * size, posY + 0.35 * size + elevation);
+    glVertex2f(posX + 0.06 * size, posY + 0.23 * size + elevation);
+    glVertex2f(posX - 0.06 * size, posY + 0.23 * size + elevation);
+    glEnd();
+
+    // Helmet visor
+    glBegin(GL_POLYGON);
+    glColor3f(0.0, 0.0, 0.0); // Black
+    glVertex2f(posX - 0.05 * size, posY + 0.33 * size + elevation);
+    glVertex2f(posX + 0.05 * size, posY + 0.33 * size + elevation);
+    glVertex2f(posX + 0.05 * size, posY + 0.25 * size + elevation);
+    glVertex2f(posX - 0.05 * size, posY + 0.25 * size + elevation);
+    glEnd();
+
+    // Body
+    glBegin(GL_POLYGON);
+    glColor3f(0.9, 0.9, 0.9); // Light grey
+    glVertex2f(posX - 0.06 * size, posY + 0.23 * size + elevation);
+    glVertex2f(posX + 0.06 * size, posY + 0.23 * size + elevation);
+    glVertex2f(posX + 0.06 * size, posY + 0.0 * size + elevation);
+    glVertex2f(posX - 0.06 * size, posY + 0.0 * size + elevation);
+    glEnd();
+
+    // Left arm
+    glBegin(GL_POLYGON);
+    glColor3f(0.9, 0.9, 0.9); // Light grey
+    glVertex2f(posX - 0.06 * size, posY + 0.2 * size + elevation);
+    glVertex2f(posX - 0.12 * size, posY + 0.15 * size + elevation);
+    glVertex2f(posX - 0.12 * size, posY + 0.05 * size + elevation);
+    glVertex2f(posX - 0.06 * size, posY + 0.1 * size + elevation);
+    glEnd();
+
+    // Right arm
+    glBegin(GL_POLYGON);
+    glColor3f(0.9, 0.9, 0.9); // Light grey
+    glVertex2f(posX + 0.06 * size, posY + 0.2 * size + elevation);
+    glVertex2f(posX + 0.12 * size, posY + 0.15 * size + elevation);
+    glVertex2f(posX + 0.12 * size, posY + 0.05 * size + elevation);
+    glVertex2f(posX + 0.06 * size, posY + 0.1 * size + elevation);
+    glEnd();
+
+    // Left leg
+    glBegin(GL_POLYGON);
+    glColor3f(0.9, 0.9, 0.9); // Light grey
+    glVertex2f(posX - 0.04 * size, posY + 0.1 * size + elevation);  // Adjusted posY
+    glVertex2f(posX - 0.02 * size, posY - 0.1 * size + elevation);
+    glVertex2f(posX - 0.06 * size, posY - 0.1 * size + elevation);
+    glVertex2f(posX - 0.08 * size, posY + 0.1 * size + elevation);  // Adjusted posY
+    glEnd();
+
+    // Right leg
+    glBegin(GL_POLYGON);
+    glColor3f(0.9, 0.9, 0.9); // Light grey
+    glVertex2f(posX + 0.04 * size, posY + 0.1 * size + elevation);  // Adjusted posY
+    glVertex2f(posX + 0.02 * size, posY - 0.1 * size + elevation);
+    glVertex2f(posX + 0.06 * size, posY - 0.1 * size + elevation);
+    glVertex2f(posX + 0.08 * size, posY + 0.1 * size + elevation);  // Adjusted posY
+    glEnd();
+
+    // Left glove
+    glBegin(GL_POLYGON);
+    glColor3f(0.5, 0.5, 0.5); // Grey
+    glVertex2f(posX - 0.12 * size, posY + 0.05 * size + elevation);
+    glVertex2f(posX - 0.13 * size, posY + 0.04 * size + elevation);
+    glVertex2f(posX - 0.12 * size, posY + 0.02 * size+ elevation);
+    glVertex2f(posX - 0.11 * size, posY + 0.03 * size + elevation);
+    glEnd();
+
+    // Right glove
+    glBegin(GL_POLYGON);
+    glColor3f(0.5, 0.5, 0.5); // Grey
+    glVertex2f(posX + 0.12 * size, posY + 0.05 * size + elevation);
+    glVertex2f(posX + 0.13 * size, posY + 0.04 * size + elevation);
+    glVertex2f(posX + 0.12 * size, posY + 0.02 * size + elevation);
+    glVertex2f(posX + 0.11 * size, posY + 0.03 * size + elevation);
+    glEnd();
+
+    // Left boot
+    glBegin(GL_POLYGON);
+    glColor3f(0.5, 0.5, 0.5); // Grey
+    glVertex2f(posX - 0.06 * size, posY - 0.1 * size + elevation);
+    glVertex2f(posX - 0.02 * size, posY - 0.1 * size + elevation);
+    glVertex2f(posX - 0.02 * size, posY - 0.12 * size + elevation);
+    glVertex2f(posX - 0.06 * size, posY - 0.12 * size + elevation);
+    glEnd();
+
+    // Right boot
+    glBegin(GL_POLYGON);
+    glColor3f(0.5, 0.5, 0.5); // Grey
+    glVertex2f(posX + 0.06 * size, posY - 0.1 * size + elevation);
+    glVertex2f(posX + 0.02 * size, posY - 0.1 * size + elevation);
+    glVertex2f(posX + 0.02 * size, posY - 0.12 * size + elevation);
+    glVertex2f(posX + 0.06 * size, posY - 0.12 * size + elevation);
+    glEnd();
+
+    // Backpack
+    glBegin(GL_POLYGON);
+    glColor3f(0.5, 0.5, 0.5); // Grey
+    glVertex2f(posX - 0.05 * size, posY + 0.23 * size + elevation);
+    glVertex2f(posX + 0.05 * size, posY + 0.23 * size + elevation);
+    glVertex2f(posX + 0.05 * size, posY + 0.15 * size + elevation);
+    glVertex2f(posX - 0.05 * size, posY + 0.15 * size + elevation);
+    glEnd();
+}
+
+
+void drawObstacle(const Obstacle& obs) {
+    glBegin(GL_POLYGON);
+    glColor3f(0.5, 0.5, 0.5); // Grey color for space debris
+    glVertex2f(obs.x, obs.y);
+    glVertex2f(obs.x + obs.width, obs.y);
+    glVertex2f(obs.x + obs.width, obs.y + obs.height);
+    glVertex2f(obs.x, obs.y + obs.height);
+    glEnd();
+}
+
+void drawText(float x, float y, std::string text, float r, float g, float b) {
+    glColor3f(r, g, b); // text color
+    glRasterPos2f(x, y);
+    for (size_t i = 0; i < text.length(); i++) {
+        glutBitmapCharacter(GLUT_BITMAP_TIMES_ROMAN_24, text[i]);
+    }
+}
+
+void drawTimer() {
+    std::stringstream ss;
+    ss << "Timer: " << seconds << "s";
+    drawText(-0.9, 0.9, ss.str(), 1.0, 1.0, 1.0);
+}
+
+void drawScore() {
+    std::stringstream ss;
+    ss << "Score: " << score;
+    drawText(-0.9, 0.8, ss.str(), 1.0, 1.0, 1.0);
+}
+
+void drawSky() {
+    glClearColor(0.0, 0.0, 0.0, 1.0); // Background
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glColor3f(1.0, 1.0, 1.0); // White color for stars
+    glPointSize(1.0); // Size of each star is 1 pixel
+    glBegin(GL_POINTS);
+    for (int i = 0; i < 1000; i++) {
+        float x = (float)(rand() % 4000 - 2000) / 1000.0; // Random x-coordinate between -2.0 and 2.0
+        float y = (float)(rand() % 4000 - 2000) / 1000.0; // Random y-coordinate between -2.0 and 2.0
+        glVertex2f(x, y);
+    }
+    glEnd();
+}
+
+void drawGround() {
+    glBegin(GL_LINES);
+    glColor3f(0.5, 0.5, 0.5); // Grey color for the ground line
+    glVertex2f(-1.0, groundLevel);
+    glVertex2f(1.0, groundLevel);
+    glEnd();
+}
+
+void drawMenu() {
+    drawSky();
+    drawText(-0.2, 0.4, "Main Menu", 1.0, 1.0, 1.0);
+    drawText(-0.2, 0.2, "1. Start Game", 1.0, 1.0, 1.0);
+    drawText(-0.2, 0.0, "2. Exit", 1.0, 1.0, 1.0);
+}
+
+void draw() {
+    glClear(GL_COLOR_BUFFER_BIT);
+    glLoadIdentity();
+
+    switch (currentGameState) {
+        case MENU:
+            drawMenu();
+            break;
+        case GAME:
+            drawSky();
+            drawGround();  // Draw the ground line
+            drawCharacter();
+            drawTimer();            drawScore();
+            // Draw obstacles
+            for (size_t i = 0; i < obstacles.size(); ++i) {
+                drawObstacle(obstacles[i]);
+            }
+            break;
+        case GAME_OVER:
+            drawSky();
+            drawText(-0.2, 0.0, "Game Over", 1.0, 1.0, 1.0);
+            break;
+    }
+
+    glFlush();
+}
+
+void update(int) {
+    if (isGameOver) return;
+
+    // Apply gravity
+    if (posY > groundLevel || isJumping) {
+        velocityY -= gravity;
+        posY += velocityY;
+
+        if (posY <= groundLevel) {
+            posY = groundLevel;
+            velocityY = 0.0;
+            isJumping = false;
+        }
+    }
+
+    // Move obstacles if game is in play
+    if (currentGameState == GAME) {
+
+        for (size_t i = 0; i < obstacles.size(); ++i) {
+            obstacles[i].x -= obstacleSpeed;
+        }
+
+        // Check for passed obstacles and increment score
+        for (size_t i = 0; i < obstacles.size(); ++i) {
+            if (!obstacles[i].passed && posX > obstacles[i].x + obstacles[i].width) {
+                obstacles[i].passed = true;
+                score++; // Increment score when an obstacle is passed
+            }
+        }
+
+        // Remove off-screen obstacles
+        if (!obstacles.empty() && obstacles.front().x + obstacles.front().width < -1.0) {
+            obstacles.erase(obstacles.begin());
+        }
+
+        // Spawn new obstacles
+        frameCounter++;
+        if (frameCounter >= obstacleSpawnTime) {
+            frameCounter = 0;
+            Obstacle newObstacle = {1.0, groundLevel, 0.1, 0.2, false};
+            obstacles.push_back(newObstacle);
+        }
+
+        // Check for collisions
+        for (size_t i = 0; i < obstacles.size(); ++i) {
+            if (posX < obstacles[i].x + obstacles[i].width && posX + 0.1 > obstacles[i].x &&
+                posY < obstacles[i].y + obstacles[i].height && posY + 0.4 > obstacles[i].y) {
+                isGameOver = true;
+                std::cout << "Game Over!" << std::endl;
+            }
+        }
+    }
+
+    glutPostRedisplay();
+    glutTimerFunc(16, update, 0); // Roughly 60 FPS
+}
+
+void timer(int) {
+    if (currentGameState == GAME) {
+        seconds++;
+    }
+    glutPostRedisplay();
+    glutTimerFunc(1000, timer, 0); // This updates the timer every second
+}
+
+
+void keyboard(unsigned char key, int x, int y) {
+    switch (currentGameState) {
+        case MENU:
+            switch (key) {
+                case '1':
+                    currentGameState = GAME;
+                    break;
+                case '2':
+                    exit(0);
+            }
+            break;
+        case GAME:
+            if (isGameOver) return;
+
+            switch (key) {
+                    case ' ':
+                    if (!isJumping) {
+                        isJumping = true;
+                        velocityY = jumpStrength;
+                    }
+                    break;
+            }
+            break;
+    }
+    glutPostRedisplay();
+}
+
+
+int main(int argc, char** argv) {
+
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_SINGLE | GLUT_RGB);
+    glutInitWindowSize(800, 600);
+    glutInitWindowPosition(100, 100);
+    glutCreateWindow("Space Escape");
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);
+    srand(time(0)); // Seed for random number generation
+    glutDisplayFunc(draw);
+    glutKeyboardFunc(keyboard);
+    glutTimerFunc(0, update, 0);
+    glutTimerFunc(0, timer, 0);
+
+    glutMainLoop();
+    return 0;
+}
+
+
